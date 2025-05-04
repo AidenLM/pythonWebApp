@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Aid Coordination</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 500px; }
+        .map-container { height: 100%; }
+        .match-suggestion {
+            border-left: 4px solid #3B82F6;
+            background-color: #EFF6FF;
+        }
+        .notification-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .notification {
+            animation: slideIn 0.5s ease-out;
+            margin-bottom: 10px;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">Disaster Aid Coordination</h1>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Message Form -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-semibold mb-4">Submit Aid Information</h2>
+                <form id="message-form" class="space-y-4">
+                    <div>
+                        <label for="message" class="block text-sm font-medium text-gray-700">Message</label>
+                        <textarea id="message" name="message" rows="3" 
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                placeholder="Describe what aid supplies you have or need..."></textarea>
+                    </div>
+                    
+                    <div>
+                        <label for="location" class="block text-sm font-medium text-gray-700">Location (District)</label>
+                        <input type="text" id="location" name="location" 
+                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                               placeholder="Enter your district...">
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input type="checkbox" id="is_need" name="is_need" 
+                               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                        <label for="is_need" class="ml-2 block text-sm text-gray-700">
+                            I need aid supplies
+                        </label>
+                    </div>
+                    
+                    <button type="submit" 
+                            class="w-full bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Submit
+                    </button>
+                </form>
+            </div>
+
+            <!-- Map -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-semibold mb-4">Aid Map</h2>
+                <div id="map" class="rounded-lg"></div>
+            </div>
+        </div>
+        
+        <!-- Messages List -->
+        <div class="mt-8 bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold">Recent Messages</h2>
+                <div class="flex space-x-2">
+                    <button id="filter-all" 
+                            class="px-3 py-1 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        All
+                    </button>
+                    <button id="filter-need" 
+                            class="px-3 py-1 rounded-md bg-red-100 text-red-800 text-sm font-medium hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        Need
+                    </button>
+                    <button id="filter-offer" 
+                            class="px-3 py-1 rounded-md bg-green-100 text-green-800 text-sm font-medium hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        Offer
+                    </button>
+                </div>
+            </div>
+            <div id="messages-list" class="space-y-4">
+                <!-- Messages will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container" class="notification-container"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map
+        const map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Store markers
+        const markers = new Map();
+
+        // Aid-related keywords and their emojis
+        const aidKeywords = {
+            'baby': '🍼',
+            'water': '💧',
+            'blanket': '🛏️',
+            'food': '🍞',
+            'medicine': '💊',
+            'medical': '💊',
+            'drink': '💧',
+            'bottle': '🍼',
+            'bed': '🛏️',
+            'bread': '🍞',
+            'pill': '💊',
+            'drug': '💊'
+        };
+
+        // Function to highlight keywords and add emojis
+        function processMessage(message) {
+            let processedMessage = message;
+            let emojis = new Set();
+            
+            Object.keys(aidKeywords).forEach(keyword => {
+                const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+                if (regex.test(processedMessage)) {
+                    processedMessage = processedMessage.replace(regex, `<strong>${keyword}</strong>`);
+                    emojis.add(aidKeywords[keyword]);
+                }
+            });
+            
+            return {
+                text: processedMessage,
+                emojis: Array.from(emojis).join(' ')
+            };
+        }
+
+        let allMessages = [];
+        let currentFilter = 'all';
+
+        // Function to add marker to map
+        function addMarker(message) {
+            // Use Nominatim API to geocode the location
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(message.location)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const lat = parseFloat(data[0].lat);
+                        const lon = parseFloat(data[0].lon);
+                        
+                        const processed = processMessage(message.message);
+                        const popupContent = `
+                            <div class="p-2">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="px-2 py-1 rounded-full text-xs font-semibold ${
+                                        message.is_need ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                                    }">
+                                        ${message.is_need ? 'Need' : 'Offer'}
+                                    </span>
+                                    ${processed.emojis ? `<span class="text-lg">${processed.emojis}</span>` : ''}
+                                </div>
+                                <p class="text-gray-800">${processed.text}</p>
+                                <p class="text-sm text-gray-500 mt-1">
+                                    <span class="font-medium">Location:</span> ${message.location}
+                                </p>
+                                <p class="text-xs text-gray-400 mt-2">
+                                    Posted ${new Date(message.created_at).toLocaleString()}
+                                </p>
+                            </div>
+                        `;
+
+                        const marker = L.marker([lat, lon], {
+                            icon: L.divIcon({
+                                className: message.is_need ? 'need-marker' : 'offer-marker',
+                                html: `<div class="w-6 h-6 rounded-full ${
+                                    message.is_need ? 'bg-red-500' : 'bg-green-500'
+                                }"></div>`,
+                                iconSize: [24, 24]
+                            })
+                        }).addTo(map)
+                        .bindPopup(popupContent);
+
+                        markers.set(message.id, marker);
+                    }
+                });
+        }
+
+        // Function to update map markers based on filter
+        function updateMapMarkers() {
+            // Remove all existing markers
+            markers.forEach(marker => marker.remove());
+            markers.clear();
+
+            // Add filtered markers
+            const filteredMessages = currentFilter === 'all' 
+                ? allMessages 
+                : allMessages.filter(msg => 
+                    currentFilter === 'need' ? msg.is_need : !msg.is_need
+                );
+
+            filteredMessages.forEach(addMarker);
+        }
+
+        // Load messages when page loads
+        document.addEventListener('DOMContentLoaded', loadMessages);
+
+        async function loadMessages() {
+            const response = await fetch('/api/messages');
+            allMessages = await response.json();
+            applyFilter();
+            updateMapMarkers();
+        }
+
+        // Function to show notification
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            
+            notification.className = `notification p-4 rounded-lg shadow-lg max-w-sm ${
+                type === 'match' ? 'bg-blue-50 border-l-4 border-blue-500' : 
+                type === 'error' ? 'bg-red-50 border-l-4 border-red-500' : 
+                'bg-gray-50 border-l-4 border-gray-500'
+            }`;
+            
+            notification.innerHTML = `
+                <div class="flex items-start">
+                    <div class="flex-1">
+                        <p class="text-sm font-medium ${
+                            type === 'match' ? 'text-blue-800' : 
+                            type === 'error' ? 'text-red-800' : 
+                            'text-gray-800'
+                        }">
+                            ${message}
+                        </p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" 
+                            class="ml-4 text-gray-400 hover:text-gray-500">
+                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(notification);
+            
+            // Auto remove after 10 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 10000);
+        }
+
+        // Function to find matching offers for a need
+        function findMatches(message) {
+            if (!message.is_need) return []; // Only find matches for needs
+            
+            const matches = [];
+            const messageLocation = message.location.toLowerCase();
+            const messageWords = message.message.toLowerCase().split(/\s+/);
+            
+            // Keywords to match
+            const keywords = [
+                'baby', 'water', 'blanket', 'food', 'medicine', 'medical',
+                'drink', 'bottle', 'bed', 'bread', 'pill', 'drug',
+                'formula', 'diaper', 'clothes', 'shelter', 'tent',
+                'first aid', 'bandage', 'supplies', 'equipment',
+                'transport', 'vehicle', 'car', 'ambulance'
+            ];
+            
+            // Find matching keywords in the message
+            const messageKeywords = keywords.filter(keyword => 
+                messageWords.some(word => word.includes(keyword))
+            );
+            
+            if (messageKeywords.length === 0) return []; // No keywords found
+            
+            // Search through offers for matches
+            allMessages.forEach(offer => {
+                if (!offer.is_need && offer.location.toLowerCase() === messageLocation) {
+                    const offerWords = offer.message.toLowerCase().split(/\s+/);
+                    const matchingKeywords = messageKeywords.filter(keyword =>
+                        offerWords.some(word => word.includes(keyword))
+                    );
+                    
+                    if (matchingKeywords.length > 0) {
+                        matches.push({
+                            offer,
+                            matchingKeywords,
+                            matchScore: matchingKeywords.length
+                        });
+                        
+                        // Show notification for each match
+                        showNotification(
+                            `Match found in ${messageLocation}: ${matchingKeywords.join(', ')}`,
+                            'match'
+                        );
+                    }
+                }
+            });
+            
+            return matches.sort((a, b) => b.matchScore - a.matchScore);
+        }
+
+        // Function to create match suggestion HTML
+        function createMatchSuggestion(matches) {
+            if (matches.length === 0) return '';
+            
+            const match = matches[0]; // Get the best match
+            const processed = processMessage(match.offer.message);
+            
+            return `
+                <div class="match-suggestion p-4 mt-4 rounded-lg">
+                    <h3 class="font-semibold text-blue-800 mb-2">Potential Match Found!</h3>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                            Offer
+                        </span>
+                        ${processed.emojis ? `<span class="text-lg">${processed.emojis}</span>` : ''}
+                    </div>
+                    <p class="text-gray-800">${processed.text}</p>
+                    <p class="text-sm text-gray-500 mt-1">
+                        <span class="font-medium">Location:</span> ${match.offer.location}
+                    </p>
+                    <p class="text-sm text-blue-600 mt-2">
+                        Matching items: ${match.matchingKeywords.join(', ')}
+                    </p>
+                    <p class="text-xs text-gray-400 mt-2">
+                        Posted ${new Date(match.offer.created_at).toLocaleString()}
+                    </p>
+                </div>
+            `;
+        }
+
+        // Update the message display to include matches
+        function displayMessage(message) {
+            const processed = processMessage(message.message);
+            const matches = message.is_need ? findMatches(message) : [];
+            const matchSuggestion = createMatchSuggestion(matches);
+            
+            return `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${
+                                message.is_need ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                            }">
+                                ${message.is_need ? 'Need' : 'Offer'}
+                            </span>
+                            ${processed.emojis ? `<span class="text-lg">${processed.emojis}</span>` : ''}
+                        </div>
+                        <p class="text-gray-800">${processed.text}</p>
+                        <p class="text-sm text-gray-500 mt-1">
+                            <span class="font-medium">Location:</span> ${message.location}
+                        </p>
+                        <p class="text-xs text-gray-400 mt-2">
+                            Posted ${new Date(message.created_at).toLocaleString()}
+                        </p>
+                        ${matchSuggestion}
+                    </div>
+                    <button onclick="deleteMessage(${message.id})" 
+                            class="text-red-500 hover:text-red-700 focus:outline-none">
+                        Delete
+                    </button>
+                </div>
+            `;
+        }
+
+        // Update the applyFilter function to use the new displayMessage function
+        function applyFilter() {
+            const messagesList = document.getElementById('messages-list');
+            messagesList.innerHTML = '';
+            
+            const filteredMessages = currentFilter === 'all' 
+                ? allMessages 
+                : allMessages.filter(msg => 
+                    currentFilter === 'need' ? msg.is_need : !msg.is_need
+                );
+            
+            filteredMessages.forEach(message => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'p-4 bg-gray-50 rounded-lg';
+                messageDiv.innerHTML = displayMessage(message);
+                messagesList.appendChild(messageDiv);
+            });
+        }
+
+        // Add event listeners for filter buttons
+        document.getElementById('filter-all').addEventListener('click', () => {
+            currentFilter = 'all';
+            updateFilterButtons();
+            applyFilter();
+            updateMapMarkers();
+        });
+
+        document.getElementById('filter-need').addEventListener('click', () => {
+            currentFilter = 'need';
+            updateFilterButtons();
+            applyFilter();
+            updateMapMarkers();
+        });
+
+        document.getElementById('filter-offer').addEventListener('click', () => {
+            currentFilter = 'offer';
+            updateFilterButtons();
+            applyFilter();
+            updateMapMarkers();
+        });
+
+        function updateFilterButtons() {
+            const buttons = {
+                'all': document.getElementById('filter-all'),
+                'need': document.getElementById('filter-need'),
+                'offer': document.getElementById('filter-offer')
+            };
+
+            buttons.all.className = 'px-3 py-1 rounded-md bg-blue-100 text-blue-800 text-sm font-medium hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500';
+            buttons.need.className = 'px-3 py-1 rounded-md bg-red-100 text-red-800 text-sm font-medium hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500';
+            buttons.offer.className = 'px-3 py-1 rounded-md bg-green-100 text-green-800 text-sm font-medium hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500';
+
+            if (currentFilter === 'all') {
+                buttons.all.className = 'px-3 py-1 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500';
+            } else if (currentFilter === 'need') {
+                buttons.need.className = 'px-3 py-1 rounded-md bg-red-500 text-white text-sm font-medium hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500';
+            } else {
+                buttons.offer.className = 'px-3 py-1 rounded-md bg-green-500 text-white text-sm font-medium hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500';
+            }
+        }
+
+        document.getElementById('message-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const message = document.getElementById('message').value.trim();
+            const location = document.getElementById('location').value.trim();
+            const isNeed = document.getElementById('is_need').checked;
+            
+            if (message && location) {
+                const response = await fetch('/api/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message, location, is_need: isNeed }),
+                });
+                
+                const newMessage = await response.json();
+                allMessages.unshift(newMessage);
+                
+                // Reset form
+                document.getElementById('message-form').reset();
+                applyFilter();
+                addMarker(newMessage);
+                
+                // If it's a need message, check for matches immediately
+                if (isNeed) {
+                    findMatches(newMessage);
+                }
+            }
+        });
+
+        async function deleteMessage(id) {
+            await fetch(`/api/messages/${id}`, {
+                method: 'DELETE',
+            });
+            
+            // Remove marker
+            const marker = markers.get(id);
+            if (marker) {
+                marker.remove();
+                markers.delete(id);
+            }
+            
+            // Remove from messages array
+            allMessages = allMessages.filter(msg => msg.id !== id);
+            applyFilter();
+        }
+    </script>
+</body>
+</html> 
