@@ -1,56 +1,67 @@
-# Afet Yardım Koordinasyon Uygulaması
+# Disaster Aid Coordination Web App
 
-Bu uygulama, afet durumlarında yardım taleplerini ve yardım tekliflerini koordine etmek için geliştirilmiş bir web uygulamasıdır.
+![App Screenshot](e2e4d254-fd11-4cd6-a629-5a8cf5f03880.png)
 
-## Özellikler
+This is a disaster aid coordination platform built using **Python (Flask)** for the backend and **React.js** for the frontend. The goal of this application is to provide a real-time, location-based communication tool for those in need and those offering help during emergency or disaster scenarios.
 
-- Kullanıcılar yardım talebi veya teklifi oluşturabilir
-- Konum bazlı harita görüntüleme
-- Otomatik eşleştirme sistemi
-- Bildirim sistemi
-- Modern ve kullanıcı dostu arayüz
+---
 
-## Kurulum
+## Features
 
-1. Projeyi klonlayın:
+- ✉ **Message Submission**: Users can submit messages indicating what aid they need or what they can offer.
+- 📍 **Location Tracking**: Messages are tagged with district names and plotted on an interactive map using Leaflet and OpenStreetMap.
+- 📅 **Real-Time Updates**: Recent messages are displayed instantly with timestamp and category labels ("Need" or "Offer").
+- ⭐ **Filter View**: Easily toggle between messages offering aid or requesting help.
+- 🔍 **Clean UI**: A simple and responsive layout for quick usage in critical situations.
+
+---
+
+## Tech Stack
+
+**Frontend**
+- React.js
+- Leaflet.js
+- Bootstrap (or Tailwind depending on branch)
+
+**Backend**
+- Python
+- Flask
+- SQLite (or JSON-based local storage for testing)
+
+---
+
+## How to Run
+
+### 1. Backend (Flask)
 ```bash
-git clone [repo-url]
-cd [repo-name]
-```
-
-2. Sanal ortam oluşturun ve aktif edin:
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac için
-# veya
-.\venv\Scripts\activate  # Windows için
-```
-
-3. Gerekli paketleri yükleyin:
-```bash
+cd backend
 pip install -r requirements.txt
-```
-
-4. Uygulamayı çalıştırın:
-```bash
 python app.py
 ```
 
-## Kullanım
+### 2. Frontend (React)
+```bash
+cd frontend
+npm install
+npm start
+```
 
-1. Tarayıcınızda `http://localhost:5000` adresine gidin
-2. Yeni bir mesaj oluşturmak için "Yeni Mesaj" butonuna tıklayın
-3. Mesajınızı girin ve konumunuzu seçin
-4. Haritada diğer mesajları görüntüleyin ve eşleşmeleri takip edin
+Then visit: [http://localhost:3000](http://localhost:3000)
 
-## Teknolojiler
+---
 
-- Flask (Backend)
-- SQLite (Veritabanı)
-- Leaflet.js (Harita)
-- Bootstrap (UI)
-- JavaScript (Frontend)
+## Contribution
 
-## Lisans
+Feel free to fork the repository, open issues, and submit pull requests to improve the app. Suggestions for better geolocation, scalability, and real-time WebSocket integration are welcome.
 
-MIT
+---
+
+## License
+
+MIT License.
+
+---
+
+## Author
+
+- GitHub: [AidenLM](https://github.com/AidenLM)
