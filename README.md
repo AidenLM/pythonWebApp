@@ -1,6 +1,7 @@
+
 # Disaster Aid Coordination Web App
 
-![App Screenshot](e2e4d254-fd11-4cd6-a629-5a8cf5f03880.png)
+![App Screenshot](./Screenshot%202025-05-13%20at%2000.03.17.png)
 
 This is a disaster aid coordination platform built using **Python (Flask)** for the backend and **React.js** for the frontend. The goal of this application is to provide a real-time, location-based communication tool for those in need and those offering help during emergency or disaster scenarios.
 
